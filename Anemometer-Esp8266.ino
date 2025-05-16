@@ -18,20 +18,21 @@ const char* password = "ThereIsNoKnowledgeThatIsNotPower";
 const char* mqtt_server = "192.168.1.10";
 
 // anemometer stuff
-const int RecordTime = 30; // Define Measuring Time (Seconds)
+const int RecordTime = 10; // Define Measuring Time (Seconds)
 const int SensorPin = 14;  // Define Interrupt Pin (GPIO14, hacked pin on ESP8266-01)
 //const float fudge = 2.72;  // multiply wind result by this for calibration
 const float fudge = 5.5; // just guessing, previous was too low compared to weather service reports
                         // even tho 2.72 is from 25mph calibration, I think the wifi being on eats
                         // cycles and makes it too low (which wasn't on during calibration)
                         // - could also be from just not being up high enough
+const int current_readings_count = 30;
 int readCounter = 0;
 int new_read = 0;
 int prev_read = 0;
 int avgCount = 0;
 int lastAvg = 0;
 float cur_windspeed;
-float current_readings[10];
+float current_readings[current_readings_count];
 float hourly_readings[12];
 float daily_readings[24];
 float hourly_peak = 0.0;
@@ -42,7 +43,7 @@ float hour_avg = 0.0;
 //float prev_hour_avg = 0.0;
 float daily_avg = 0.0;
 float daily_peak = 0.0;
-int half_min_counter = 0;
+int ten_sec_counter = 0;
 int hour_counter = 0;
 
 WiFiClient espClient;
@@ -161,7 +162,7 @@ void loop() {
   client.loop();
 
   unsigned long now = millis();
-  if ((now - lastMsg) > (RecordTime * 1000)) { // 30 sex
+  if ((now - lastMsg) > (RecordTime * 1000)) { // 10 sex
 
     lastMsg = now;
     cur_windspeed = windspeed(readCounter);
@@ -177,29 +178,29 @@ void loop() {
       new_daily_hit = true;
     }
 
-    // send MQTT message every min instead of 30 secs
-    if (half_min_counter % 2 == 0) {
+    // send MQTT message every 30 secs instead of 10
+    if (ten_sec_counter % 3 == 0) {
       snprintf (msg, 50, "%.1f", cur_windspeed, true);
       //Serial.print("Wind Speed: ");
       //Serial.println(msg);
       client.publish("sensor/wind/speed", msg, true);
     }
     
-    current_readings[half_min_counter] = cur_windspeed;
+    current_readings[ten_sec_counter] = cur_windspeed;
 
-    half_min_counter++;
-    if (half_min_counter > 9) { // 5 mins
-      half_min_counter = 0;
+    ten_sec_counter++;
+    if (ten_sec_counter > (current_readings_count - 1)) { // 5 mins
+      ten_sec_counter = 0;
 
       // add to hourly readings
       //hourly_readings[avgCount] = cur_windspeed;
 
       // get average of current readings and add to hourly
       float current_avg = 0.0;
-      for (int i = 0; i < 10; i++) {
+      for (int i = 0; i < current_readings_count; i++) {
         current_avg += current_readings[i];
       }
-      current_avg /= 10;
+      current_avg /= current_readings_count;
       hourly_readings[avgCount] = current_avg;
 
       // get and announce current hourly avg
